@@ -20,6 +20,12 @@ See [architecture.md](architecture.md) for detailed architecture documentation o
 cargo build --release
 ```
 
+## Formatting
+
+```bash
+cargo fmt
+```
+
 ## Running
 
 ```bash
