@@ -69,9 +69,9 @@ impl Cpu {
         memory: &mut Memory,
     ) -> Result<InstructionResult, MemoryError> {
         let opcode = (instruction >> 12) as u8 & 0x0F;
-        let rs1 = ((instruction >> 8) & 0xF) as usize;
-        let rs2 = ((instruction >> 4) & 0xF) as usize;
-        let rd = (instruction & 0xF) as usize;
+        let rs1 = ((instruction >> 8) & 0xF) as u8;
+        let rs2 = ((instruction >> 4) & 0xF) as u8;
+        let rd = (instruction & 0xF) as u8;
 
         match opcode {
             0x0 => Ok(self.end()),
@@ -93,126 +93,129 @@ impl Cpu {
         }
     }
 
+    fn register(&self, index: u8) -> u16 {
+        self.registers[index as usize]
+    }
+
+    fn set_register(&mut self, index: u8, value: u16) {
+        self.registers[index as usize] = value
+    }
+
     // Instruction implementations
 
     fn end(&self) -> InstructionResult {
         InstructionResult::Halt
     }
 
-    fn hby(&mut self, instruction: u16, rd: usize) -> InstructionResult {
+    fn hby(&mut self, instruction: u16, rd: u8) -> InstructionResult {
         // HBY: immd8 -> RD[15-08]
         // RS1+RS2 form 8-bit immediate
         let immd8 = ((instruction >> 4) & 0xFF) as u8;
-        self.registers[rd] = (self.registers[rd] & 0x00FF) | ((immd8 as u16) << 8);
+        self.set_register(rd, (self.register(rd) & 0x00FF) | ((immd8 as u16) << 8));
         InstructionResult::Next
     }
 
-    fn lby(&mut self, instruction: u16, rd: usize) -> InstructionResult {
+    fn lby(&mut self, instruction: u16, rd: u8) -> InstructionResult {
         // LBY: immd8 -> RD[07-00]
         // RS1+RS2 form 8-bit immediate
         let immd8 = ((instruction >> 4) & 0xFF) as u8;
-        self.registers[rd] = (self.registers[rd] & 0xFF00) | (immd8 as u16);
+        self.set_register(rd, (self.register(rd) & 0xFF00) | (immd8 as u16));
         InstructionResult::Next
     }
 
-    fn lod(&mut self, rs1: usize, rd: usize, memory: &Memory) -> InstructionResult {
+    fn lod(&mut self, rs1: u8, rd: u8, memory: &Memory) -> InstructionResult {
         // LOD: ram[RS1] -> RD
-        let address = self.registers[rs1];
+        let address = self.register(rs1);
         let value = memory.read_data(address);
-        self.registers[rd] = value;
+        self.set_register(rd, value);
         InstructionResult::Next
     }
 
-    fn str(
-        &self,
-        rs1: usize,
-        rs2: usize,
-        memory: &mut Memory,
-    ) -> Result<InstructionResult, MemoryError> {
+    fn str(&self, rs1: u8, rs2: u8, memory: &mut Memory) -> Result<InstructionResult, MemoryError> {
         // STR: RS2 -> ram[RS1]
-        let address = self.registers[rs1];
-        let value = self.registers[rs2];
+        let address = self.register(rs1);
+        let value = self.register(rs2);
         memory.write_data(address, value)?;
         Ok(InstructionResult::Next)
     }
 
-    fn add(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
+    fn add(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // ADD: RS1 + RS2 -> RD
-        let a = self.registers[rs1] as u32;
-        let b = self.registers[rs2] as u32;
+        let a = self.register(rs1) as u32;
+        let b = self.register(rs2) as u32;
         let result = a + b;
 
-        self.registers[rd] = result as u16;
+        self.set_register(rd, result as u16);
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ b) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
 
         InstructionResult::Next
     }
 
-    fn sub(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
+    fn sub(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // SUB: RS1 - RS2 -> RD
-        let a = self.registers[rs1] as u32;
-        let b = self.registers[rs2] as u32;
+        let a = self.register(rs1) as u32;
+        let b = self.register(rs2) as u32;
         let result = a.wrapping_sub(b);
 
-        self.registers[rd] = result as u16;
+        self.set_register(rd, result as u16);
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ b) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
 
         InstructionResult::Next
     }
 
-    fn adi(&mut self, rs1: usize, instruction: u16, rd: usize) -> InstructionResult {
+    fn adi(&mut self, rs1: u8, instruction: u16, rd: u8) -> InstructionResult {
         // ADI: RS1 + immd4 -> RD
         let immd4 = ((instruction >> 4) & 0xF) as u32;
-        let a = self.registers[rs1] as u32;
+        let a = self.register(rs1) as u32;
         let result = a + immd4;
 
-        self.registers[rd] = result as u16;
+        self.set_register(rd, result as u16);
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ immd4) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
 
         InstructionResult::Next
     }
 
-    fn sbi(&mut self, rs1: usize, instruction: u16, rd: usize) -> InstructionResult {
+    fn sbi(&mut self, rs1: u8, instruction: u16, rd: u8) -> InstructionResult {
         // SBI: RS1 - immd4 -> RD
         let immd4 = ((instruction >> 4) & 0xF) as u32;
-        let a = self.registers[rs1] as u32;
+        let a = self.register(rs1) as u32;
         let result = a.wrapping_sub(immd4);
 
-        self.registers[rd] = result as u16;
+        self.set_register(rd, result as u16);
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ immd4) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
 
         InstructionResult::Next
     }
 
-    fn and(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
+    fn and(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // AND: RS1 and RS2 -> RD
-        self.registers[rd] = self.registers[rs1] & self.registers[rs2];
+        self.set_register(rd, self.register(rs1) & self.register(rs2));
         InstructionResult::Next
     }
 
-    fn orr(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
+    fn orr(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // ORR: RS1 or RS2 -> RD
-        self.registers[rd] = self.registers[rs1] | self.registers[rs2];
+        self.set_register(rd, self.register(rs1) | self.register(rs2));
         InstructionResult::Next
     }
 
-    fn xor(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
+    fn xor(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // XOR: RS1 xor RS2 -> RD
-        self.registers[rd] = self.registers[rs1] ^ self.registers[rs2];
+        self.set_register(rd, self.register(rs1) ^ self.register(rs2));
         InstructionResult::Next
     }
 
-    fn nor(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
+    fn nor(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // NOR: RS1 nor RS2 -> RD
-        self.registers[rd] = !(self.registers[rs1] | self.registers[rs2]);
+        self.set_register(rd, !(self.register(rs1) | self.register(rs2)));
         InstructionResult::Next
     }
 
-    fn shf(&mut self, rs1: usize, instruction: u16, rd: usize) -> InstructionResult {
+    fn shf(&mut self, rs1: u8, instruction: u16, rd: u8) -> InstructionResult {
         // SHF: RS1 shifted by immd4 -> RD
         // immd4 format: DAAA
         // D is direction: 0 left, 1 right
@@ -221,7 +224,7 @@ impl Cpu {
         let direction = (immd4 >> 3) & 1;
         let amount = ((immd4 & 0x7) + 1) as u32;
 
-        let value = self.registers[rs1];
+        let value = self.register(rs1);
         let result = if direction == 0 {
             // Left shift
             let shifted = value << amount;
@@ -234,14 +237,14 @@ impl Cpu {
             shifted
         };
 
-        self.registers[rd] = result;
+        self.set_register(rd, result);
         InstructionResult::Next
     }
 
-    fn brv(&self, rs1: usize, rs2: usize, instruction: u16) -> InstructionResult {
+    fn brv(&self, rs1: u8, rs2: u8, instruction: u16) -> InstructionResult {
         // BRV: if (RS1 matches NZP) then (RS2 -> PC)
         // RD contains condition bits: 0NZP
-        let value = self.registers[rs1];
+        let value = self.register(rs1);
         let cond = instruction & 0xF;
 
         // Check sign of value
@@ -263,13 +266,13 @@ impl Cpu {
         };
 
         if should_jump {
-            InstructionResult::Jump(self.registers[rs2])
+            InstructionResult::Jump(self.register(rs2))
         } else {
             InstructionResult::Next
         }
     }
 
-    fn brf(&self, rs2: usize, instruction: u16) -> InstructionResult {
+    fn brf(&self, rs2: u8, instruction: u16) -> InstructionResult {
         // BRF: if (C or V is set) then (RS2 -> PC)
         // RD contains condition bits: 00VC
         let cond = instruction & 0xF;
@@ -284,7 +287,7 @@ impl Cpu {
         };
 
         if should_jump {
-            InstructionResult::Jump(self.registers[rs2])
+            InstructionResult::Jump(self.register(rs2))
         } else {
             InstructionResult::Next
         }
