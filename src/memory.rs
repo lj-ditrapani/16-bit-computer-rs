@@ -39,13 +39,6 @@ impl Memory {
             }
         }
     }
-
-    pub fn dump_state(&self) {
-        println!("Memory state:");
-        println!("  Program ROM: {} words", self.program_rom.len());
-        println!("  Data ROM: {} words", self.data_rom.len());
-        println!("  RAM: {} words", self.ram.len());
-    }
 }
 
 pub fn load_cartridge_into_memory(path: &Path) -> Result<Memory, CartridgeError> {

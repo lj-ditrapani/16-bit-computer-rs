@@ -36,12 +36,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run the computer
     if let Err(e) = computer.run(cli.debug) {
         eprintln!("CPU error: {}", e);
+        computer.cpu.dump_state();
         return Err(e.into());
     }
 
     if cli.dump {
         computer.cpu.dump_state();
-        computer.memory.dump_state();
     }
 
     Ok(())
