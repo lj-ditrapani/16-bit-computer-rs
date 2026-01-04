@@ -16,14 +16,6 @@ struct Cli {
     /// Path to cartridge ROM file
     #[arg(short, long)]
     cartridge: PathBuf,
-
-    /// Enable debug output
-    #[arg(short, long)]
-    debug: bool,
-
-    /// Dump CPU state after execution
-    #[arg(long)]
-    dump: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,14 +26,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut computer = Computer::new(memory);
 
     // Run the computer
-    if let Err(e) = computer.run(cli.debug) {
+    if let Err(e) = computer.run() {
         eprintln!("CPU error: {}", e);
         computer.cpu.dump_state();
         return Err(e.into());
-    }
-
-    if cli.dump {
-        computer.cpu.dump_state();
     }
 
     Ok(())

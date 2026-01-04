@@ -20,12 +20,6 @@ pub enum InstructionResult {
     Halt,      // END instruction executed
 }
 
-#[derive(Debug)]
-pub enum FrameResult {
-    Complete(u32), // Frame completed, number of instructions executed
-    Halted(u32),   // END instruction reached, number of instructions executed
-}
-
 impl Cpu {
     pub fn new() -> Self {
         Cpu {
