@@ -124,7 +124,7 @@ impl Cpu {
     }
 
     fn str(
-        &mut self,
+        &self,
         rs1: usize,
         rs2: usize,
         memory: &mut Memory,
@@ -238,7 +238,7 @@ impl Cpu {
         InstructionResult::Next
     }
 
-    fn brv(&mut self, rs1: usize, rs2: usize, instruction: u16) -> InstructionResult {
+    fn brv(&self, rs1: usize, rs2: usize, instruction: u16) -> InstructionResult {
         // BRV: if (RS1 matches NZP) then (RS2 -> PC)
         // RD contains condition bits: 0NZP
         let value = self.registers[rs1];
@@ -269,7 +269,7 @@ impl Cpu {
         }
     }
 
-    fn brf(&mut self, rs2: usize, instruction: u16) -> InstructionResult {
+    fn brf(&self, rs2: usize, instruction: u16) -> InstructionResult {
         // BRF: if (C or V is set) then (RS2 -> PC)
         // RD contains condition bits: 00VC
         let cond = instruction & 0xF;
