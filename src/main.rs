@@ -1,12 +1,12 @@
 use clap::Parser;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
+mod computer;
 mod cpu;
 mod error;
 mod memory;
 
-use cpu::Cpu;
+use computer::Computer;
 use memory::load_cartridge_into_memory;
 
 #[derive(Parser)]
@@ -29,46 +29,19 @@ struct Cli {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    // Load cartridge into memory
-    let mut memory = load_cartridge_into_memory(&cli.cartridge)?;
+    // Load cartridge into memory and create computer
+    let memory = load_cartridge_into_memory(&cli.cartridge)?;
+    let mut computer = Computer::new(memory);
 
-    // Initialize CPU
-    let mut cpu = Cpu::new();
-
-    // Frame-based execution loop
-    let frame_duration = Duration::from_nanos(16_683_333); // 16.6833 ms
-    loop {
-        let frame_start = Instant::now();
-
-        // Execute frame
-        match cpu.execute_frame(&mut memory) {
-            Ok(cpu::FrameResult::Complete(inst_count)) => {
-                if cli.debug {
-                    println!("Frame complete: {} instructions", inst_count);
-                }
-            }
-            Ok(cpu::FrameResult::Halted(inst_count)) => {
-                println!("CPU halted after {} instructions", inst_count);
-                break;
-            }
-            Err(e) => {
-                eprintln!("CPU error: {}", e);
-                return Err(e.into());
-            }
-        }
-
-        // TODO: Process IO (video, audio, input)
-
-        // Sleep for remainder of frame time
-        let elapsed = frame_start.elapsed();
-        if elapsed < frame_duration {
-            std::thread::sleep(frame_duration - elapsed);
-        }
+    // Run the computer
+    if let Err(e) = computer.run(cli.debug) {
+        eprintln!("CPU error: {}", e);
+        return Err(e.into());
     }
 
     if cli.dump {
-        cpu.dump_state();
-        memory.dump_state();
+        computer.cpu.dump_state();
+        computer.memory.dump_state();
     }
 
     Ok(())

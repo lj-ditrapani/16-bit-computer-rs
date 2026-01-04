@@ -48,21 +48,6 @@ impl Cpu {
         Ok(instruction_result)
     }
 
-    pub fn execute_frame(&mut self, memory: &mut Memory) -> Result<FrameResult, MemoryError> {
-        const INSTRUCTIONS_PER_FRAME: u32 = 34_440;
-        let mut instructions_executed = 0;
-
-        for _ in 0..INSTRUCTIONS_PER_FRAME {
-            let instruction_result = self.step(memory);
-            instructions_executed += 1;
-            if matches!(instruction_result, Ok(InstructionResult::Halt)) {
-                return Ok(FrameResult::Halted(instructions_executed));
-            }
-        }
-
-        Ok(FrameResult::Complete(instructions_executed))
-    }
-
     fn execute_instruction(
         &mut self,
         instruction: u16,
