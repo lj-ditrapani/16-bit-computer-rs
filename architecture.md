@@ -13,14 +13,15 @@ The emulator follows a modular design with clear separation of concerns:
 ```
 ┌─────────────────────────────────────────┐
 │         Command Line Interface          │
-│  (CLI argument parsing, main loop)      │
+│  (CLI argument parsing)                 │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│            Emulator Core                │
+│            Computer                     │
 │  ┌──────────┐  ┌──────────┐             │
 │  │   CPU    │  │  Memory  │             │
 │  └──────────┘  └──────────┘             │
+│  (main loop in Computer::run())         │
 └─────────────────────────────────────────┘
 ```
 
@@ -62,43 +63,79 @@ All instructions are 16 bits:
 
 Some instructions use immediate values in RS1/RS2 positions:
 - **HBY/LBY**: RS1+RS2 form 8-bit immediate, RD is destination
-- **ADI/SBI/SHF**: RS1 is source, RS2 contains 4-bit immediate, RD is destination
-- **BRV**: RS1 is register containing value to test (checks sign directly), RS2 is jump target, RD contains condition bits
-- **BRF**: RS1 unused (0), RS2 is jump target, RD contains condition bits (checks C/V flags)
+- **ADI/SBI**: RS1 is source register, RS2 contains 4-bit immediate, RD is destination
+- **SHF**: RS1 is source register, RS2 contains direction+amount (DAAA format), RD is destination
+- **BRV**: RS1 is register containing value to test (checks sign directly), RS2 is jump target register, RD contains condition bits (masked to 0x7)
+- **BRF**: RS1 unused (0), RS2 is jump target register, RD contains condition bits (masked to 0x7, checks C/V flags)
 
-### Instruction Set Implementation
+### Instruction Result
 
-Each instruction will be implemented as a method on the `Cpu` struct:
+Instructions return an `InstructionResult` enum that indicates how the program counter should be updated:
+
+```rust
+#[derive(Debug)]
+pub enum InstructionResult {
+    Jump(u16), // Set PC to address
+    Next,      // Increment PC
+    Halt,      // END instruction executed
+}
+```
+
+### Register Access Helpers
+
+The CPU provides helper methods for register access:
 
 ```rust
 impl Cpu {
-    fn execute_instruction(&mut self, instruction: u16, memory: &mut Memory) -> Result<(), CpuError> {
-        let opcode = (instruction >> 12) & 0xF;
-        let rs1 = ((instruction >> 8) & 0xF) as usize;
-        let rs2 = ((instruction >> 4) & 0xF) as usize;
-        let rd = (instruction & 0xF) as usize;
-        
+    fn register(&self, index: u8) -> u16 {
+        self.registers[index as usize]
+    }
+
+    fn set_register(&mut self, index: u8, value: u16) {
+        self.registers[index as usize] = value
+    }
+}
+```
+
+### Instruction Set Implementation
+
+Each instruction is implemented as a method on the `Cpu` struct. Register indices are `u8` (0-15):
+
+```rust
+impl Cpu {
+    fn execute_instruction(
+        &mut self,
+        instruction: u16,
+        memory: &mut Memory,
+    ) -> Result<InstructionResult, MemoryError> {
+        let opcode = (instruction >> 12) as u8 & 0x0F;
+        let rs1 = ((instruction >> 8) & 0xF) as u8;
+        let rs2 = ((instruction >> 4) & 0xF) as u8;
+        let rd = (instruction & 0xF) as u8;
+
         match opcode {
-            0x0 => self.end(),
-            0x1 => self.hby(instruction, rd),
-            0x2 => self.lby(instruction, rd),
-            0x3 => self.lod(rs1, rd, memory),
+            0x0 => Ok(self.end()),
+            0x1 => Ok(self.hby(instruction, rd)),
+            0x2 => Ok(self.lby(instruction, rd)),
+            0x3 => Ok(self.lod(rs1, rd, memory)),
             0x4 => self.str(rs1, rs2, memory),
-            0x5 => self.add(rs1, rs2, rd),
-            0x6 => self.sub(rs1, rs2, rd),
-            0x7 => self.adi(rs1, instruction, rd),
-            0x8 => self.sbi(rs1, instruction, rd),
-            0x9 => self.and(rs1, rs2, rd),
-            0xA => self.orr(rs1, rs2, rd),
-            0xB => self.xor(rs1, rs2, rd),
-            0xC => self.nor(rs1, rs2, rd),
-            0xD => self.shf(rs1, instruction, rd),
-            0xE => self.brv(rs1, rs2, instruction),
-            0xF => self.brf(rs2, instruction),
+            0x5 => Ok(self.add(rs1, rs2, rd)),
+            0x6 => Ok(self.sub(rs1, rs2, rd)),
+            0x7 => Ok(self.adi(rs1, rs2, rd)),
+            0x8 => Ok(self.sbi(rs1, rs2, rd)),
+            0x9 => Ok(self.and(rs1, rs2, rd)),
+            0xA => Ok(self.orr(rs1, rs2, rd)),
+            0xB => Ok(self.xor(rs1, rs2, rd)),
+            0xC => Ok(self.nor(rs1, rs2, rd)),
+            0xD => Ok(self.shf(rs1, rs2, rd)),
+            0xE => Ok(self.brv(rs1, rs2, rd)),
+            _ => Ok(self.brf(rs2, rd)), // _ can only be 0xF
         }
     }
 }
 ```
+
+**Note**: Most instructions return `InstructionResult` directly (wrapped in `Ok()`), but `str` returns `Result<InstructionResult, MemoryError>` because it can fail when writing to read-only memory.
 
 ### Flag Management
 
@@ -161,28 +198,26 @@ Data Address Space (16-bit):
 ```rust
 impl Memory {
     // Read from program ROM
-    fn read_program(&self, address: u16) -> Result<u16, MemoryError> {
-        // Bounds check and return instruction
+    pub fn read_program(&self, address: u16) -> Result<u16, MemoryError> {
+        Ok(self.program_rom[address as usize])
     }
-    
-    // Read from data space
-    fn read_data(&self, address: u16) -> Result<u16, MemoryError> {
+
+    // Read from data space (never errors - all u16 addresses are valid)
+    pub fn read_data(&self, address: u16) -> u16 {
         match address {
-            0x0000..=0x7FFF => Ok(self.data_rom[address as usize]),
-            0x8000..=0xFFFF => Ok(self.ram[(address - 0x8000) as usize]),
-            _ => Err(MemoryError::InvalidAddress),
+            0x0000..=0x7FFF => self.data_rom[address as usize],
+            0x8000..=0xFFFF => self.ram[(address - 0x8000) as usize],
         }
     }
-    
+
     // Write to data space (only RAM, ROM is read-only)
-    fn write_data(&mut self, address: u16, value: u16) -> Result<(), MemoryError> {
+    pub fn write_data(&mut self, address: u16, value: u16) -> Result<(), MemoryError> {
         match address {
-            0x0000..=0x7FFF => Err(MemoryError::ReadOnly),
+            0x0000..=0x7FFF => Err(MemoryError::ReadOnly(address)),
             0x8000..=0xFFFF => {
                 self.ram[(address - 0x8000) as usize] = value;
                 Ok(())
-            },
-            _ => Err(MemoryError::InvalidAddress),
+            }
         }
     }
 }
@@ -222,16 +257,6 @@ Total: 192 KB
 ### Loading Implementation
 
 ```rust
-impl Memory {
-    fn new() -> Self {
-        Memory {
-            program_rom: [0u16; 65536],
-            data_rom: [0u16; 32768],
-            ram: [0u16; 32768],
-        }
-    }
-}
-
 fn load_cartridge_into_memory(path: &Path) -> Result<Memory, CartridgeError> {
     let data = std::fs::read(path)?;
     
@@ -282,57 +307,73 @@ Instead of cycle-perfect emulation, we use a simplified frame-based approach:
 
 ```rust
 impl Cpu {
-    fn step(&mut self, memory: &mut Memory) -> Result<ExecutionState, CpuError> {
-        // Fetch instruction
+    pub fn step(&mut self, memory: &mut Memory) -> Result<InstructionResult, MemoryError> {
         let instruction = memory.read_program(self.pc)?;
-        
-        // Increment PC (unless instruction modifies it)
-        let next_pc = self.pc.wrapping_add(1);
-        
-        // Execute instruction
-        let state = self.execute_instruction(instruction, memory)?;
-        
-        // Update PC (if not modified by instruction)
-        if state.pc_modified {
-            self.pc = state.new_pc;
-        } else {
-            self.pc = next_pc;
-        }
-        
-        Ok(state)
-    }
-    
-    fn execute_frame(&mut self, memory: &mut Memory) -> Result<FrameResult, CpuError> {
-        const INSTRUCTIONS_PER_FRAME: u32 = 34_440;
-        let mut instructions_executed = 0;
-        
-        for _ in 0..INSTRUCTIONS_PER_FRAME {
-            match self.step(memory)? {
-                ExecutionState::Running => {
-                    instructions_executed += 1;
-                },
-                ExecutionState::Halted => {
-                    return Ok(FrameResult::Halted(instructions_executed));
-                },
-            }
-        }
-        
-        Ok(FrameResult::Complete(instructions_executed))
+        let instruction_result = self.execute_instruction(instruction, memory)?;
+        let pc = match instruction_result {
+            InstructionResult::Jump(addr) => addr,
+            InstructionResult::Next => self.pc.wrapping_add(1),
+            InstructionResult::Halt => self.pc,
+        };
+        self.pc = pc;
+        Ok(instruction_result)
     }
 }
 ```
 
-### Execution States
+## Computer Architecture
+
+The `Computer` struct encapsulates both the CPU and memory, and contains the main execution loop:
 
 ```rust
-enum ExecutionState {
-    Running,
-    Halted,  // END instruction executed
+pub struct Computer {
+    pub cpu: Cpu,
+    pub memory: Memory,
 }
 
-enum FrameResult {
-    Complete(u32),  // Frame completed, number of instructions executed
-    Halted(u32),    // END instruction reached, number of instructions executed
+impl Computer {
+    pub fn new(memory: Memory) -> Self {
+        Computer {
+            cpu: Cpu::new(),
+            memory,
+        }
+    }
+
+    pub fn execute_frame(&mut self) -> Result<(), MemoryError> {
+        const INSTRUCTIONS_PER_FRAME: u32 = 34_440;
+
+        for _ in 0..INSTRUCTIONS_PER_FRAME {
+            let instruction_result = self.cpu.step(&mut self.memory);
+            if matches!(instruction_result, Ok(InstructionResult::Halt)) {
+                return Ok(());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn run(&mut self) -> Result<(), MemoryError> {
+        let frame_duration = Duration::from_nanos(16_683_333); // 16.6833 ms
+        loop {
+            let frame_start = Instant::now();
+
+            // Execute frame
+            match self.execute_frame() {
+                Ok(()) => {}
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+
+            // TODO: Process IO (video, audio, input)
+
+            // Sleep for remainder of frame time
+            let elapsed = frame_start.elapsed();
+            if elapsed < frame_duration {
+                std::thread::sleep(frame_duration - elapsed);
+            }
+        }
+    }
 }
 ```
 
@@ -350,71 +391,26 @@ struct Cli {
     /// Path to cartridge ROM file
     #[arg(short, long)]
     cartridge: PathBuf,
-    
-    /// Number of instructions to execute (0 = unlimited)
-    #[arg(short, long, default_value = "0")]
-    instructions: u64,
-    
-    /// Enable debug output
-    #[arg(short, long)]
-    debug: bool,
-    
-    /// Dump CPU state after execution
-    #[arg(long)]
-    dump: bool,
 }
 ```
 
-### Main Execution Loop
+### Main Entry Point
 
 ```rust
-use std::time::{Duration, Instant};
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    
-    // Load cartridge into memory
-    let mut memory = load_cartridge_into_memory(&cli.cartridge)?;
-    
-    // Initialize CPU
-    let mut cpu = Cpu::new();
-    
-    // Frame-based execution loop
-    let frame_duration = Duration::from_nanos(16_683_333); // 16.6833 ms
-    loop {
-        let frame_start = Instant::now();
-        
-        // Execute frame
-        match cpu.execute_frame(&mut memory) {
-            Ok(FrameResult::Complete(inst_count)) => {
-                if cli.debug {
-                    println!("Frame complete: {} instructions", inst_count);
-                }
-            },
-            Ok(FrameResult::Halted(inst_count)) => {
-                println!("CPU halted after {} instructions", inst_count);
-                break;
-            },
-            Err(e) => {
-                eprintln!("CPU error: {}", e);
-                return Err(e.into());
-            },
-        }
-        
-        // TODO: Process IO (video, audio, input)
-        
-        // Sleep for remainder of frame time
-        let elapsed = frame_start.elapsed();
-        if elapsed < frame_duration {
-            std::thread::sleep(frame_duration - elapsed);
-        }
+
+    // Load cartridge into memory and create computer
+    let memory = load_cartridge_into_memory(&cli.cartridge)?;
+    let mut computer = Computer::new(memory);
+
+    // Run the computer
+    if let Err(e) = computer.run() {
+        eprintln!("CPU error: {}", e);
+        computer.cpu.dump_state();
+        return Err(e.into());
     }
-    
-    if cli.dump {
-        cpu.dump_state();
-        memory.dump_state();
-    }
-    
+
     Ok(())
 }
 ```
@@ -425,52 +421,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 #[derive(Debug, thiserror::Error)]
-enum CpuError {
-    #[error("Invalid instruction: {0:04X}")]
-    InvalidInstruction(u16),
-    
-    #[error("Invalid register index: {0}")]
-    InvalidRegister(usize),
-    
-    #[error("Memory error: {0}")]
-    Memory(#[from] MemoryError),
-}
-
-#[derive(Debug, thiserror::Error)]
-enum MemoryError {
-    #[error("Invalid address: {0:04X}")]
-    InvalidAddress(u16),
-    
+pub enum MemoryError {
     #[error("Read-only memory at address: {0:04X}")]
     ReadOnly(u16),
-    
-    #[error("Address out of bounds: {0:04X}")]
-    OutOfBounds(u16),
 }
 
 #[derive(Debug, thiserror::Error)]
-enum CartridgeError {
+pub enum CartridgeError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Invalid cartridge file size: {0} bytes (expected 196608 bytes)")]
     InvalidSize(usize),
 }
 ```
+
+**Note**: `CpuError` was removed - CPU operations that can error (like `str`) return `MemoryError` directly. Most instructions cannot error and return `InstructionResult` directly.
 
 ## Module Structure
 
 ```
 src/
 ├── main.rs              # CLI entry point
-├── cpu/
-│   ├── mod.rs           # CPU module
-│   ├── registers.rs     # Register and flag management
-│   └── instructions.rs  # Instruction implementations
-├── memory/
-│   ├── mod.rs           # Memory module
-│   ├── rom.rs           # ROM handling
-│   └── ram.rs           # RAM handling
+├── computer.rs          # Computer struct (CPU + Memory + main loop)
+├── cpu.rs               # CPU implementation
+├── memory.rs            # Memory implementation and cartridge loading
 └── error.rs             # Error types
 ```
 
@@ -478,17 +453,18 @@ src/
 
 ### Phase 1: Core CPU and Memory
 - [x] CPU register structure
-- [ ] Basic instruction execution
-- [ ] Memory read/write
-- [ ] Instruction fetch
-- [ ] Frame-based execution loop
-- [ ] Simple CLI
+- [x] Basic instruction execution
+- [x] Memory read/write
+- [x] Instruction fetch
+- [x] Frame-based execution loop
+- [x] Simple CLI
+- [x] Computer struct
 
 ### Phase 2: Complete Instruction Set
-- [ ] All 16 instructions implemented
-- [ ] Flag management
-- [ ] Branch instructions
-- [ ] Shift operations
+- [x] All 16 instructions implemented
+- [x] Flag management
+- [x] Branch instructions
+- [x] Shift operations
 
 ### Phase 3: Testing and Validation
 - [ ] Unit tests for each instruction
@@ -527,11 +503,3 @@ clap = { version = "4.0", features = ["derive"] }
 thiserror = "1.0"
 ```
 
-## Future Considerations
-
-- **Performance**: Using fixed-size `u16` arrays for memory access (no heap allocation, better cache locality)
-- **Timing**: Frame-based execution (not cycle-perfect) - simpler implementation, adequate for most use cases
-- **Debugging**: Add breakpoint support and step-by-step execution
-- **Cartridge Format**: Binary format is defined (192 KB fixed size)
-- **Save States**: Implement save/load state functionality
-- **Disassembler**: Add instruction disassembly for debugging
