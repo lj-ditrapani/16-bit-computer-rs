@@ -37,12 +37,8 @@ impl Cpu {
     }
 
     pub fn step(&mut self, memory: &mut Memory) -> Result<InstructionResult, CpuError> {
-        // Fetch instruction
         let instruction = memory.read_program(self.pc)?;
-
-        // Execute instruction (may modify PC for branch instructions)
         let instruction_result = self.execute_instruction(instruction, memory)?;
-
         let pc = match instruction_result {
             InstructionResult::Jump(addr) => addr,
             InstructionResult::Next => self.pc.wrapping_add(1),
@@ -72,7 +68,7 @@ impl Cpu {
         instruction: u16,
         memory: &mut Memory,
     ) -> Result<InstructionResult, CpuError> {
-        let opcode = (instruction >> 12) & 0xF;
+        let opcode = (instruction >> 12) as u8 & 0x0F;
         let rs1 = ((instruction >> 8) & 0xF) as usize;
         let rs2 = ((instruction >> 4) & 0xF) as usize;
         let rd = (instruction & 0xF) as usize;
@@ -93,8 +89,7 @@ impl Cpu {
             0xC => self.nor(rs1, rs2, rd),
             0xD => self.shf(rs1, instruction, rd),
             0xE => self.brv(rs1, rs2, instruction),
-            0xF => self.brf(rs2, instruction),
-            _ => Err(CpuError::InvalidInstruction(instruction)),
+            _ => self.brf(rs2, instruction), // _ can only be 0xF since opcode is masked to 4 bits
         }
     }
 
