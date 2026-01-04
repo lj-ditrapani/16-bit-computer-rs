@@ -72,14 +72,6 @@ impl Cpu {
         }
     }
 
-    fn register(&self, index: u8) -> u16 {
-        self.registers[index as usize]
-    }
-
-    fn set_register(&mut self, index: u8, value: u16) {
-        self.registers[index as usize] = value
-    }
-
     // Instruction implementations
 
     fn end(&self) -> InstructionResult {
@@ -230,17 +222,9 @@ impl Cpu {
         let is_positive = !is_negative && !is_zero;
 
         // Condition bits: 0NZP (bit 3 unused, bit 2=negative, bit 1=zero, bit 0=positive)
-        let should_jump = match cond & 0x7 {
-            0x0 => false,        // 0000: never jump (NOP)
-            0x1 => is_positive,  // 0001: jump if positive
-            0x2 => is_zero,      // 0010: jump if zero
-            0x3 => !is_negative, // 0011: jump if not negative
-            0x4 => is_negative,  // 0100: jump if negative
-            0x5 => !is_zero,     // 0101: jump if not zero
-            0x6 => !is_positive, // 0110: jump if not positive
-            0x7 => true,         // 0111: unconditional jump
-            _ => false,
-        };
+        let should_jump = is_bit_set(cond, 0b0100) && is_negative
+            || is_bit_set(cond, 0b0010) && is_zero
+            || is_bit_set(cond, 0b0001) && is_positive;
 
         if should_jump {
             InstructionResult::Jump(self.register(rs2))
@@ -253,19 +237,23 @@ impl Cpu {
         // BRF: if (C or V is set) then (RS2 -> PC)
         // RD contains condition bits: 00VC
         // Condition bits: 00VC (bits 3-2 unused, bit 1=overflow, bit 0=carry)
-        let should_jump = match cond & 0x7 {
-            0x0 => !self.carry && !self.overflow, // 0000: jump if carry and overflow NOT set
-            0x1 => self.carry,                    // 0001: jump if carry set
-            0x2 => self.overflow,                 // 0010: jump if overflow set
-            0x3 => self.carry || self.overflow,   // 0011: jump if overflow or carry set
-            _ => false,
-        };
+        let should_jump: bool = cond == 0 && !self.carry && !self.overflow
+            || is_bit_set(cond, 0b0001) && self.carry
+            || is_bit_set(cond, 0b0010) && self.overflow;
 
         if should_jump {
             InstructionResult::Jump(self.register(rs2))
         } else {
             InstructionResult::Next
         }
+    }
+
+    fn register(&self, index: u8) -> u16 {
+        self.registers[index as usize]
+    }
+
+    fn set_register(&mut self, index: u8, value: u16) {
+        self.registers[index as usize] = value
     }
 
     pub fn dump_state(&self) {
@@ -278,4 +266,8 @@ impl Cpu {
             println!("    R{}: ${:04X} ({})", i, reg, reg);
         }
     }
+}
+
+fn is_bit_set(cond: u8, mask: u8) -> bool {
+    (cond & mask) != 0
 }
