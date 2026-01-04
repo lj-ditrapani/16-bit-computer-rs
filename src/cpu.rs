@@ -81,15 +81,15 @@ impl Cpu {
             0x4 => self.str(rs1, rs2, memory),
             0x5 => Ok(self.add(rs1, rs2, rd)),
             0x6 => Ok(self.sub(rs1, rs2, rd)),
-            0x7 => Ok(self.adi(rs1, instruction, rd)),
-            0x8 => Ok(self.sbi(rs1, instruction, rd)),
+            0x7 => Ok(self.adi(rs1, rs2, rd)),
+            0x8 => Ok(self.sbi(rs1, rs2, rd)),
             0x9 => Ok(self.and(rs1, rs2, rd)),
             0xA => Ok(self.orr(rs1, rs2, rd)),
             0xB => Ok(self.xor(rs1, rs2, rd)),
             0xC => Ok(self.nor(rs1, rs2, rd)),
-            0xD => Ok(self.shf(rs1, instruction, rd)),
-            0xE => Ok(self.brv(rs1, rs2, instruction)),
-            _ => Ok(self.brf(rs2, instruction)), // _ can only be 0xF since opcode is masked to 4 bits
+            0xD => Ok(self.shf(rs1, rs2, rd)),
+            0xE => Ok(self.brv(rs1, rs2, rd)),
+            _ => Ok(self.brf(rs2, rd)), // _ can only be 0xF since opcode is masked to 4 bits
         }
     }
 
@@ -165,28 +165,28 @@ impl Cpu {
         InstructionResult::Next
     }
 
-    fn adi(&mut self, rs1: u8, instruction: u16, rd: u8) -> InstructionResult {
+    fn adi(&mut self, rs1: u8, immd4: u8, rd: u8) -> InstructionResult {
         // ADI: RS1 + immd4 -> RD
-        let immd4 = ((instruction >> 4) & 0xF) as u32;
+        let immd = immd4 as u32;
         let a = self.register(rs1) as u32;
-        let result = a + immd4;
+        let result = a + immd;
 
         self.set_register(rd, result as u16);
         self.carry = result > 0xFFFF;
-        self.overflow = ((a ^ immd4) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
+        self.overflow = ((a ^ immd) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
 
         InstructionResult::Next
     }
 
-    fn sbi(&mut self, rs1: u8, instruction: u16, rd: u8) -> InstructionResult {
+    fn sbi(&mut self, rs1: u8, immd4: u8, rd: u8) -> InstructionResult {
         // SBI: RS1 - immd4 -> RD
-        let immd4 = ((instruction >> 4) & 0xF) as u32;
+        let immd = immd4 as u32;
         let a = self.register(rs1) as u32;
-        let result = a.wrapping_sub(immd4);
+        let result = a.wrapping_sub(immd);
 
         self.set_register(rd, result as u16);
         self.carry = result > 0xFFFF;
-        self.overflow = ((a ^ immd4) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
+        self.overflow = ((a ^ immd) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
 
         InstructionResult::Next
     }
@@ -215,14 +215,13 @@ impl Cpu {
         InstructionResult::Next
     }
 
-    fn shf(&mut self, rs1: u8, instruction: u16, rd: u8) -> InstructionResult {
+    fn shf(&mut self, rs1: u8, da: u8, rd: u8) -> InstructionResult {
         // SHF: RS1 shifted by immd4 -> RD
         // immd4 format: DAAA
         // D is direction: 0 left, 1 right
         // AAA is (amount - 1), so 0-7 -> 1-8
-        let immd4 = (instruction >> 4) & 0xF;
-        let direction = (immd4 >> 3) & 1;
-        let amount = ((immd4 & 0x7) + 1) as u32;
+        let direction = da >> 3;
+        let amount = ((da & 0x7) + 1) as u32;
 
         let value = self.register(rs1);
         let result = if direction == 0 {
@@ -241,11 +240,10 @@ impl Cpu {
         InstructionResult::Next
     }
 
-    fn brv(&self, rs1: u8, rs2: u8, instruction: u16) -> InstructionResult {
+    fn brv(&self, rs1: u8, rs2: u8, cond: u8) -> InstructionResult {
         // BRV: if (RS1 matches NZP) then (RS2 -> PC)
         // RD contains condition bits: 0NZP
         let value = self.register(rs1);
-        let cond = instruction & 0xF;
 
         // Check sign of value
         let is_negative = (value & 0x8000) != 0;
@@ -253,7 +251,7 @@ impl Cpu {
         let is_positive = !is_negative && !is_zero;
 
         // Condition bits: 0NZP (bit 3 unused, bit 2=negative, bit 1=zero, bit 0=positive)
-        let should_jump = match cond {
+        let should_jump = match cond & 0x7 {
             0x0 => false,        // 0000: never jump (NOP)
             0x1 => is_positive,  // 0001: jump if positive
             0x2 => is_zero,      // 0010: jump if zero
@@ -272,13 +270,11 @@ impl Cpu {
         }
     }
 
-    fn brf(&self, rs2: u8, instruction: u16) -> InstructionResult {
+    fn brf(&self, rs2: u8, cond: u8) -> InstructionResult {
         // BRF: if (C or V is set) then (RS2 -> PC)
         // RD contains condition bits: 00VC
-        let cond = instruction & 0xF;
-
         // Condition bits: 00VC (bits 3-2 unused, bit 1=overflow, bit 0=carry)
-        let should_jump = match cond {
+        let should_jump = match cond & 0x7 {
             0x0 => !self.carry && !self.overflow, // 0000: jump if carry and overflow NOT set
             0x1 => self.carry,                    // 0001: jump if carry set
             0x2 => self.overflow,                 // 0010: jump if overflow set
