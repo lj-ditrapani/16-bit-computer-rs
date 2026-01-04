@@ -1,12 +1,6 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum CpuError {
-    #[error("Memory error: {0}")]
-    Memory(#[from] MemoryError),
-}
-
-#[derive(Debug, Error)]
 pub enum MemoryError {
     #[error("Read-only memory at address: {0:04X}")]
     ReadOnly(u16),

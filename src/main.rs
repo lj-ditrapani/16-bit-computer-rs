@@ -7,8 +7,7 @@ mod error;
 mod memory;
 
 use cpu::Cpu;
-use error::{CartridgeError, CpuError};
-use memory::{Memory, load_cartridge_into_memory};
+use memory::load_cartridge_into_memory;
 
 #[derive(Parser)]
 #[command(name = "ljd-16-bit-computer-rs")]

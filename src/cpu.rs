@@ -1,4 +1,4 @@
-use crate::error::{CpuError, MemoryError};
+use crate::error::MemoryError;
 use crate::memory::Memory;
 
 pub struct Cpu {
@@ -36,7 +36,7 @@ impl Cpu {
         }
     }
 
-    pub fn step(&mut self, memory: &mut Memory) -> Result<InstructionResult, CpuError> {
+    pub fn step(&mut self, memory: &mut Memory) -> Result<InstructionResult, MemoryError> {
         let instruction = memory.read_program(self.pc)?;
         let instruction_result = self.execute_instruction(instruction, memory)?;
         let pc = match instruction_result {
@@ -48,7 +48,7 @@ impl Cpu {
         Ok(instruction_result)
     }
 
-    pub fn execute_frame(&mut self, memory: &mut Memory) -> Result<FrameResult, CpuError> {
+    pub fn execute_frame(&mut self, memory: &mut Memory) -> Result<FrameResult, MemoryError> {
         const INSTRUCTIONS_PER_FRAME: u32 = 34_440;
         let mut instructions_executed = 0;
 
@@ -67,7 +67,7 @@ impl Cpu {
         &mut self,
         instruction: u16,
         memory: &mut Memory,
-    ) -> Result<InstructionResult, CpuError> {
+    ) -> Result<InstructionResult, MemoryError> {
         let opcode = (instruction >> 12) as u8 & 0x0F;
         let rs1 = ((instruction >> 8) & 0xF) as usize;
         let rs2 = ((instruction >> 4) & 0xF) as usize;
@@ -128,7 +128,7 @@ impl Cpu {
         rs1: usize,
         rs2: usize,
         memory: &mut Memory,
-    ) -> Result<InstructionResult, CpuError> {
+    ) -> Result<InstructionResult, MemoryError> {
         // STR: RS2 -> ram[RS1]
         let address = self.registers[rs1];
         let value = self.registers[rs2];

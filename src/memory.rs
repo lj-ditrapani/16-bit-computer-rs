@@ -16,14 +16,6 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new() -> Self {
-        Memory {
-            program_rom: [0u16; 65536],
-            data_rom: [0u16; 32768],
-            ram: [0u16; 32768],
-        }
-    }
-
     // Read from program ROM
     pub fn read_program(&self, address: u16) -> Result<u16, MemoryError> {
         Ok(self.program_rom[address as usize])
