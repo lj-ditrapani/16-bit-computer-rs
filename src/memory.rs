@@ -30,10 +30,10 @@ impl Memory {
     }
 
     // Read from data space
-    pub fn read_data(&self, address: u16) -> Result<u16, MemoryError> {
+    pub fn read_data(&self, address: u16) -> u16 {
         match address {
-            0x0000..=0x7FFF => Ok(self.data_rom[address as usize]),
-            0x8000..=0xFFFF => Ok(self.ram[(address - 0x8000) as usize]),
+            0x0000..=0x7FFF => self.data_rom[address as usize],
+            0x8000..=0xFFFF => self.ram[(address - 0x8000) as usize],
         }
     }
 

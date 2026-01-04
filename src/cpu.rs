@@ -74,58 +74,53 @@ impl Cpu {
         let rd = (instruction & 0xF) as usize;
 
         match opcode {
-            0x0 => self.end(),
-            0x1 => self.hby(instruction, rd),
-            0x2 => self.lby(instruction, rd),
-            0x3 => self.lod(rs1, rd, memory),
+            0x0 => Ok(self.end()),
+            0x1 => Ok(self.hby(instruction, rd)),
+            0x2 => Ok(self.lby(instruction, rd)),
+            0x3 => Ok(self.lod(rs1, rd, memory)),
             0x4 => self.str(rs1, rs2, memory),
-            0x5 => self.add(rs1, rs2, rd),
-            0x6 => self.sub(rs1, rs2, rd),
-            0x7 => self.adi(rs1, instruction, rd),
-            0x8 => self.sbi(rs1, instruction, rd),
-            0x9 => self.and(rs1, rs2, rd),
-            0xA => self.orr(rs1, rs2, rd),
-            0xB => self.xor(rs1, rs2, rd),
-            0xC => self.nor(rs1, rs2, rd),
-            0xD => self.shf(rs1, instruction, rd),
-            0xE => self.brv(rs1, rs2, instruction),
-            _ => self.brf(rs2, instruction), // _ can only be 0xF since opcode is masked to 4 bits
+            0x5 => Ok(self.add(rs1, rs2, rd)),
+            0x6 => Ok(self.sub(rs1, rs2, rd)),
+            0x7 => Ok(self.adi(rs1, instruction, rd)),
+            0x8 => Ok(self.sbi(rs1, instruction, rd)),
+            0x9 => Ok(self.and(rs1, rs2, rd)),
+            0xA => Ok(self.orr(rs1, rs2, rd)),
+            0xB => Ok(self.xor(rs1, rs2, rd)),
+            0xC => Ok(self.nor(rs1, rs2, rd)),
+            0xD => Ok(self.shf(rs1, instruction, rd)),
+            0xE => Ok(self.brv(rs1, rs2, instruction)),
+            _ => Ok(self.brf(rs2, instruction)), // _ can only be 0xF since opcode is masked to 4 bits
         }
     }
 
     // Instruction implementations
 
-    fn end(&self) -> Result<InstructionResult, CpuError> {
-        Ok(InstructionResult::Halt)
+    fn end(&self) -> InstructionResult {
+        InstructionResult::Halt
     }
 
-    fn hby(&mut self, instruction: u16, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn hby(&mut self, instruction: u16, rd: usize) -> InstructionResult {
         // HBY: immd8 -> RD[15-08]
         // RS1+RS2 form 8-bit immediate
         let immd8 = ((instruction >> 4) & 0xFF) as u8;
         self.registers[rd] = (self.registers[rd] & 0x00FF) | ((immd8 as u16) << 8);
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn lby(&mut self, instruction: u16, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn lby(&mut self, instruction: u16, rd: usize) -> InstructionResult {
         // LBY: immd8 -> RD[07-00]
         // RS1+RS2 form 8-bit immediate
         let immd8 = ((instruction >> 4) & 0xFF) as u8;
         self.registers[rd] = (self.registers[rd] & 0xFF00) | (immd8 as u16);
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn lod(
-        &mut self,
-        rs1: usize,
-        rd: usize,
-        memory: &Memory,
-    ) -> Result<InstructionResult, CpuError> {
+    fn lod(&mut self, rs1: usize, rd: usize, memory: &Memory) -> InstructionResult {
         // LOD: ram[RS1] -> RD
         let address = self.registers[rs1];
-        let value = memory.read_data(address)?;
+        let value = memory.read_data(address);
         self.registers[rd] = value;
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
     fn str(
@@ -141,7 +136,7 @@ impl Cpu {
         Ok(InstructionResult::Next)
     }
 
-    fn add(&mut self, rs1: usize, rs2: usize, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn add(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
         // ADD: RS1 + RS2 -> RD
         let a = self.registers[rs1] as u32;
         let b = self.registers[rs2] as u32;
@@ -151,10 +146,10 @@ impl Cpu {
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ b) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
 
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn sub(&mut self, rs1: usize, rs2: usize, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn sub(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
         // SUB: RS1 - RS2 -> RD
         let a = self.registers[rs1] as u32;
         let b = self.registers[rs2] as u32;
@@ -164,15 +159,10 @@ impl Cpu {
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ b) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
 
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn adi(
-        &mut self,
-        rs1: usize,
-        instruction: u16,
-        rd: usize,
-    ) -> Result<InstructionResult, CpuError> {
+    fn adi(&mut self, rs1: usize, instruction: u16, rd: usize) -> InstructionResult {
         // ADI: RS1 + immd4 -> RD
         let immd4 = ((instruction >> 4) & 0xF) as u32;
         let a = self.registers[rs1] as u32;
@@ -182,15 +172,10 @@ impl Cpu {
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ immd4) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
 
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn sbi(
-        &mut self,
-        rs1: usize,
-        instruction: u16,
-        rd: usize,
-    ) -> Result<InstructionResult, CpuError> {
+    fn sbi(&mut self, rs1: usize, instruction: u16, rd: usize) -> InstructionResult {
         // SBI: RS1 - immd4 -> RD
         let immd4 = ((instruction >> 4) & 0xF) as u32;
         let a = self.registers[rs1] as u32;
@@ -200,39 +185,34 @@ impl Cpu {
         self.carry = result > 0xFFFF;
         self.overflow = ((a ^ immd4) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
 
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn and(&mut self, rs1: usize, rs2: usize, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn and(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
         // AND: RS1 and RS2 -> RD
         self.registers[rd] = self.registers[rs1] & self.registers[rs2];
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn orr(&mut self, rs1: usize, rs2: usize, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn orr(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
         // ORR: RS1 or RS2 -> RD
         self.registers[rd] = self.registers[rs1] | self.registers[rs2];
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn xor(&mut self, rs1: usize, rs2: usize, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn xor(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
         // XOR: RS1 xor RS2 -> RD
         self.registers[rd] = self.registers[rs1] ^ self.registers[rs2];
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn nor(&mut self, rs1: usize, rs2: usize, rd: usize) -> Result<InstructionResult, CpuError> {
+    fn nor(&mut self, rs1: usize, rs2: usize, rd: usize) -> InstructionResult {
         // NOR: RS1 nor RS2 -> RD
         self.registers[rd] = !(self.registers[rs1] | self.registers[rs2]);
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn shf(
-        &mut self,
-        rs1: usize,
-        instruction: u16,
-        rd: usize,
-    ) -> Result<InstructionResult, CpuError> {
+    fn shf(&mut self, rs1: usize, instruction: u16, rd: usize) -> InstructionResult {
         // SHF: RS1 shifted by immd4 -> RD
         // immd4 format: DAAA
         // D is direction: 0 left, 1 right
@@ -255,15 +235,10 @@ impl Cpu {
         };
 
         self.registers[rd] = result;
-        Ok(InstructionResult::Next)
+        InstructionResult::Next
     }
 
-    fn brv(
-        &mut self,
-        rs1: usize,
-        rs2: usize,
-        instruction: u16,
-    ) -> Result<InstructionResult, CpuError> {
+    fn brv(&mut self, rs1: usize, rs2: usize, instruction: u16) -> InstructionResult {
         // BRV: if (RS1 matches NZP) then (RS2 -> PC)
         // RD contains condition bits: 0NZP
         let value = self.registers[rs1];
@@ -288,13 +263,13 @@ impl Cpu {
         };
 
         if should_jump {
-            Ok(InstructionResult::Jump(self.registers[rs2]))
+            InstructionResult::Jump(self.registers[rs2])
         } else {
-            Ok(InstructionResult::Next)
+            InstructionResult::Next
         }
     }
 
-    fn brf(&mut self, rs2: usize, instruction: u16) -> Result<InstructionResult, CpuError> {
+    fn brf(&mut self, rs2: usize, instruction: u16) -> InstructionResult {
         // BRF: if (C or V is set) then (RS2 -> PC)
         // RD contains condition bits: 00VC
         let cond = instruction & 0xF;
@@ -309,9 +284,9 @@ impl Cpu {
         };
 
         if should_jump {
-            Ok(InstructionResult::Jump(self.registers[rs2]))
+            InstructionResult::Jump(self.registers[rs2])
         } else {
-            Ok(InstructionResult::Next)
+            InstructionResult::Next
         }
     }
 
