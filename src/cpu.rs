@@ -112,54 +112,29 @@ impl Cpu {
 
     fn add(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // ADD: RS1 + RS2 -> RD
-        let a = self.register(rs1) as u32;
-        let b = self.register(rs2) as u32;
-        let result = a + b;
-
-        self.set_register(rd, result as u16);
-        self.carry = result > 0xFFFF;
-        self.overflow = ((a ^ b) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
-
-        InstructionResult::Next
+        let a = self.register(rs1);
+        let b = self.register(rs2);
+        self.basic_add(a, b, rd)
     }
 
     fn sub(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
         // SUB: RS1 - RS2 -> RD
-        let a = self.register(rs1) as u32;
-        let b = self.register(rs2) as u32;
-        let result = a.wrapping_sub(b);
-
-        self.set_register(rd, result as u16);
-        self.carry = result > 0xFFFF;
-        self.overflow = ((a ^ b) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
-
-        InstructionResult::Next
+        let a = self.register(rs1);
+        let b = self.register(rs2);
+        self.basic_add(a, (!b) + 1, rd)
     }
 
     fn adi(&mut self, rs1: u8, immd4: u8, rd: u8) -> InstructionResult {
         // ADI: RS1 + immd4 -> RD
-        let immd = immd4 as u32;
-        let a = self.register(rs1) as u32;
-        let result = a + immd;
-
-        self.set_register(rd, result as u16);
-        self.carry = result > 0xFFFF;
-        self.overflow = ((a ^ immd) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
-
-        InstructionResult::Next
+        let a = self.register(rs1);
+        self.basic_add(a, immd4 as u16, rd)
     }
 
     fn sbi(&mut self, rs1: u8, immd4: u8, rd: u8) -> InstructionResult {
         // SBI: RS1 - immd4 -> RD
-        let immd = immd4 as u32;
-        let a = self.register(rs1) as u32;
-        let result = a.wrapping_sub(immd);
-
-        self.set_register(rd, result as u16);
-        self.carry = result > 0xFFFF;
-        self.overflow = ((a ^ immd) & 0x8000) != 0 && ((a ^ result) & 0x8000) != 0;
-
-        InstructionResult::Next
+        let a = self.register(rs1);
+        let immd = immd4 as u16;
+        self.basic_add(a, (!immd) + 1, rd)
     }
 
     fn and(&mut self, rs1: u8, rs2: u8, rd: u8) -> InstructionResult {
@@ -246,6 +221,16 @@ impl Cpu {
         } else {
             InstructionResult::Next
         }
+    }
+
+    fn basic_add(&mut self, a: u16, b: u16, rd: u8) -> InstructionResult {
+        let (result, carry) = a.carrying_add(b, false);
+
+        self.set_register(rd, result);
+        self.carry = carry;
+        self.overflow = ((a ^ b) & 0x8000) == 0 && ((a ^ result) & 0x8000) != 0;
+
+        InstructionResult::Next
     }
 
     fn register(&self, index: u8) -> u16 {
