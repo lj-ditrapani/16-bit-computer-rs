@@ -81,16 +81,16 @@ impl Cpu {
     fn hby(&mut self, instruction: u16, rd: u8) -> InstructionResult {
         // HBY: immd8 -> RD[15-08]
         // RS1+RS2 form 8-bit immediate
-        let immd8 = ((instruction >> 4) & 0xFF) as u8;
-        self.set_register(rd, (self.register(rd) & 0x00FF) | ((immd8 as u16) << 8));
+        let immd8 = (instruction << 4) & 0xFF00;
+        self.set_register(rd, (self.register(rd) & 0x00FF) | immd8);
         InstructionResult::Next
     }
 
     fn lby(&mut self, instruction: u16, rd: u8) -> InstructionResult {
         // LBY: immd8 -> RD[07-00]
         // RS1+RS2 form 8-bit immediate
-        let immd8 = ((instruction >> 4) & 0xFF) as u8;
-        self.set_register(rd, (self.register(rd) & 0xFF00) | (immd8 as u16));
+        let immd8 = (instruction >> 4) & 0x00FF;
+        self.set_register(rd, (self.register(rd) & 0xFF00) | immd8);
         InstructionResult::Next
     }
 
@@ -167,7 +167,7 @@ impl Cpu {
         // D is direction: 0 left, 1 right
         // AAA is (amount - 1), so 0-7 -> 1-8
         let direction = da >> 3;
-        let amount = ((da & 0x7) + 1) as u32;
+        let amount = (da & 0x7) + 1;
 
         let value = self.register(rs1);
         let result = if direction == 0 {
