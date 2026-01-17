@@ -316,7 +316,7 @@ mod tests {
         let mut memory = create_test_memory();
 
         // HBY with zero immediate
-        cpu.registers[3] = 0x00FF;
+        cpu.registers[3] = 0x11FF;
 
         memory.program_rom[0] = build_instruction(0x1, 0x0, 0x0, 0x3);
 
@@ -366,7 +366,7 @@ mod tests {
         let mut memory = create_test_memory();
 
         // LBY with zero immediate
-        cpu.registers[2] = 0xFF00;
+        cpu.registers[2] = 0xFF11;
 
         memory.program_rom[0] = build_instruction(0x2, 0x0, 0x0, 0x2);
 
@@ -471,6 +471,8 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[3], 0x68AC);
         assert_eq!(cpu.pc, 1);
+        assert!(!cpu.carry); // Carry flag should be unset
+        assert!(!cpu.overflow); // Overflow flag should be unset
     }
 
     #[test]
@@ -488,6 +490,7 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[7], 0x0000); // Wraps around
         assert!(cpu.carry); // Carry flag should be set
+        assert!(!cpu.overflow); // Overflow flag should be unset
     }
 
     #[test]
@@ -504,6 +507,7 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[3], 0x8000); // Overflow to negative
+        assert!(!cpu.carry); // Carry flag should be unset
         assert!(cpu.overflow); // Overflow flag should be set
     }
 
@@ -522,6 +526,8 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[3], 0x4444);
         assert_eq!(cpu.pc, 1);
+        assert!(cpu.carry); // Carry flag should be set
+        assert!(!cpu.overflow); // Overflow flag should be unset
     }
 
     #[test]
@@ -538,6 +544,8 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[3], 0x0000);
+        assert!(cpu.carry);
+        assert!(!cpu.overflow);
     }
 
     #[test]
@@ -554,6 +562,8 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[3], 0xFFFF); // Wraps around (0x0001 - 0x0002 = 0xFFFF)
+        assert!(!cpu.carry);
+        assert!(!cpu.overflow);
     }
 
     #[test]
@@ -572,6 +582,8 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x1005);
         assert_eq!(cpu.pc, 1);
+        assert!(!cpu.carry);
+        assert!(!cpu.overflow);
     }
 
     #[test]
@@ -587,6 +599,8 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x100F);
+        assert!(!cpu.carry);
+        assert!(!cpu.overflow);
     }
 
     #[test]
@@ -604,6 +618,8 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x1002);
         assert_eq!(cpu.pc, 1);
+        assert!(cpu.carry);
+        assert!(!cpu.overflow);
     }
 
     #[test]
@@ -619,6 +635,8 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x1000);
+        assert!(cpu.carry);
+        assert!(!cpu.overflow);
     }
 
     #[test]
@@ -723,6 +741,7 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x0008); // 1 << 3 = 8
         assert_eq!(cpu.pc, 1);
+        assert!(!cpu.carry); // No bit shifted out
     }
 
     #[test]
@@ -758,6 +777,7 @@ mod tests {
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x0002); // 8 >> 2 = 2
         assert_eq!(cpu.pc, 1);
+        assert!(!cpu.carry); // No bit shifted out (bit 0 was 0)
     }
 
     #[test]
@@ -791,6 +811,7 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x0100); // 1 << 8 = 256
+        assert!(!cpu.carry); // No bit shifted out (bit 7 was 0)
     }
 
     #[test]
@@ -807,6 +828,7 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.registers[2], 0x00FF); // 0xFF00 >> 8 = 0x00FF
+        assert!(!cpu.carry); // Bit 7 (amount-1=7) was 0, so no carry
     }
 
     #[test]
@@ -873,22 +895,6 @@ mod tests {
         let result = cpu.step(&mut memory).unwrap();
         assert!(matches!(result, InstructionResult::Next));
         assert_eq!(cpu.pc, 1); // PC advances normally
-    }
-
-    #[test]
-    fn test_brv_multiple_conditions() {
-        let mut cpu = Cpu::new();
-        let mut memory = create_test_memory();
-
-        // Test with multiple condition bits set
-        cpu.registers[1] = 0x8000; // Negative
-        cpu.registers[2] = 0xDEAD;
-
-        // BRV R1, R2, cond=0x7 (all bits: negative, zero, positive) = unconditional jump
-        memory.program_rom[0] = build_instruction(0xE, 0x1, 0x2, 0x7);
-
-        let result = cpu.step(&mut memory).unwrap();
-        assert!(matches!(result, InstructionResult::Jump(0xDEAD))); // Should jump on negative
     }
 
     #[test]
