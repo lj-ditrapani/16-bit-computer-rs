@@ -103,16 +103,16 @@ mod tests {
         // $FA00 maps to ram[0xFA00 - 0x8000] = ram[0x7A00] = ram[31232]
         assert_eq!(computer.memory.ram[31232], 0x0000);
 
-        // Run 10 instructions
-        computer.execute_frame(Some(10)).unwrap();
+        // Run until END instruction
+        computer.execute_frame().unwrap();
 
         // After execution, the result should be at $FA00 (ram[31232])
         // 0x0014 + 0x0046 = 0x005A
         assert_eq!(computer.memory.ram[31232], 0x005a);
         assert_eq!(computer.cpu.pc, 9);
 
-        // Run 12 more instructions (should be a no-op since we already hit END)
-        computer.execute_frame(Some(12)).unwrap();
+        // Run another frame (should be a no-op since we already hit END)
+        computer.execute_frame().unwrap();
         assert_eq!(computer.memory.ram[31232], 0x005a);
         assert_eq!(computer.cpu.pc, 9);
     }
@@ -176,8 +176,8 @@ mod tests {
         // $FBFF maps to ram[0xFBFF - 0x8000] = ram[0x7BFF] = ram[31743]
         assert_eq!(computer.memory.ram[31743], 0);
 
-        // Run 21 instructions
-        computer.execute_frame(Some(21)).unwrap();
+        // Run until END instruction
+        computer.execute_frame().unwrap();
 
         // After execution: 101 - 99 = 2, 2 - 3 = -1 (65535), which is negative
         // So we should store 255
@@ -256,8 +256,8 @@ mod tests {
             computer.memory.ram[input_offset + i] = value;
         }
 
-        // Run the program
-        computer.execute_frame(Some(2048)).unwrap();
+        // Run until END instruction
+        computer.execute_frame().unwrap();
 
         // Verify input data is still there
         assert_eq!(computer.memory.ram[input_offset], 101);
@@ -337,7 +337,7 @@ mod tests {
 
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame(Some(40)).unwrap();
+        computer.execute_frame().unwrap();
 
         assert_eq!(computer.cpu.registers[0], 0xface);
         assert_eq!(computer.cpu.registers[0xa], 0x8001);
@@ -370,7 +370,7 @@ mod tests {
 
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame(Some(40)).unwrap();
+        computer.execute_frame().unwrap();
 
         assert_eq!(computer.cpu.registers[1], 0x826a);
         assert_eq!(computer.cpu.registers[2], 0x083c);
@@ -400,7 +400,7 @@ mod tests {
         ];
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame(Some(40)).unwrap();
+        computer.execute_frame().unwrap();
 
         // $FBFE maps to ram[0xFBFE - 0x8000] = ram[0x7BFE] = ram[31742]
         // $FBFF maps to ram[0xFBFF - 0x8000] = ram[0x7BFF] = ram[31743]
@@ -428,7 +428,7 @@ mod tests {
         ];
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame(Some(40)).unwrap();
+        computer.execute_frame().unwrap();
 
         // $FA00 maps to ram[0xFA00 - 0x8000] = ram[0x7A00] = ram[31232]
         assert_eq!(computer.memory.ram[31232], 0x7fff);
@@ -462,7 +462,7 @@ mod tests {
         ];
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame(Some(25)).unwrap();
+        computer.execute_frame().unwrap();
 
         // $8000 maps to ram[0x8000 - 0x8000] = ram[0] = ram[0]
         // $F7FF maps to ram[0xF7FF - 0x8000] = ram[0x77FF] = ram[30719]
@@ -483,7 +483,7 @@ mod tests {
         let mut computer = Computer::new(memory);
 
         // This should fail with a MemoryError::ReadOnly
-        let result = computer.execute_frame(Some(10));
+        let result = computer.execute_frame();
         assert!(result.is_err());
         if let Err(e) = result {
             match e {
@@ -511,10 +511,7 @@ mod tests {
         // has special bounds checking that Rust doesn't have yet.
         // For now, this test will pass because $FC00 is a valid address
         // We might want to add bounds checking later to match TypeScript behavior
-        let result = computer.execute_frame(Some(10));
-        // This will succeed in Rust because $FC00 is a valid address
-        // If we want to match TypeScript, we'd need to add validation
-        assert!(result.is_ok());
+        computer.execute_frame().unwrap();
         assert_eq!(computer.cpu.pc, 3);
     }
 
@@ -531,8 +528,7 @@ mod tests {
 
         // Similar to read test, $FC00 is valid in Rust
         // So this will succeed. We might want to add bounds checking later
-        let result = computer.execute_frame(Some(10));
-        assert!(result.is_ok());
+        computer.execute_frame().unwrap();
         assert_eq!(computer.cpu.pc, 5);
     }
 }
