@@ -16,10 +16,10 @@ impl Computer {
         }
     }
 
-    pub fn execute_frame(&mut self, instruction_count: Option<u32>) -> Result<(), MemoryError> {
+    pub fn execute_frame(&mut self) -> Result<(), MemoryError> {
         const INSTRUCTIONS_PER_FRAME: u32 = 34_440;
-        let count = instruction_count.unwrap_or(INSTRUCTIONS_PER_FRAME);
-        for _ in 0..count {
+
+        for _ in 0..INSTRUCTIONS_PER_FRAME {
             let instruction_result = self.cpu.step(&mut self.memory)?;
             if matches!(instruction_result, InstructionResult::Halt) {
                 return Ok(());
@@ -35,7 +35,7 @@ impl Computer {
             let frame_start = Instant::now();
 
             // Execute frame
-            match self.execute_frame(None) {
+            match self.execute_frame() {
                 Ok(()) => {}
                 Err(e) => {
                     return Err(e);
