@@ -16,10 +16,16 @@ impl Computer {
         }
     }
 
-    pub fn execute_frame(&mut self) -> Result<(), MemoryError> {
-        const INSTRUCTIONS_PER_FRAME: u32 = 34_440;
+    pub fn run_cpu_during_render(&mut self) -> Result<(), MemoryError> {
+        self.run_cpu(34_440)
+    }
 
-        for _ in 0..INSTRUCTIONS_PER_FRAME {
+    pub fn run_cpu_during_vblank(&mut self) -> Result<(), MemoryError> {
+        self.run_cpu(10_227)
+    }
+
+    pub fn run_cpu(&mut self, instruction_count: u32) -> Result<(), MemoryError> {
+        for _ in 0..instruction_count {
             let instruction_result = self.cpu.step(&mut self.memory)?;
             if matches!(instruction_result, InstructionResult::Halt) {
                 return Ok(());
@@ -31,18 +37,24 @@ impl Computer {
 
     pub fn run(&mut self) -> Result<(), MemoryError> {
         let frame_duration = Duration::from_nanos(16_683_333); // 16.6833 ms
+        self.run_cpu_during_render()?;
+        self.cpu.pc = 0x0080;
+        self.run_cpu_during_vblank()?;
+
         loop {
             let frame_start = Instant::now();
 
-            // Execute frame
-            match self.execute_frame() {
-                Ok(()) => {}
-                Err(e) => {
-                    return Err(e);
-                }
-            }
+            self.cpu.pc = 0x0100;
+            self.run_cpu_during_render()?;
 
-            // TODO: Process IO (video, audio, input)
+            // TODO: Process IO (video, input)
+            // Render the 200 scan lines of pixels
+            // Update input registers with any key presses
+
+            self.cpu.pc = 0x0080;
+            self.run_cpu_during_vblank()?;
+
+            // The APU can now read and write to the last 1k of DATA RAM for the next 50 us.
 
             // Sleep for remainder of frame time
             let elapsed = frame_start.elapsed();
@@ -104,7 +116,7 @@ mod tests {
         assert_eq!(computer.memory.ram[31232], 0x0000);
 
         // Run until END instruction
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         // After execution, the result should be at $FA00 (ram[31232])
         // 0x0014 + 0x0046 = 0x005A
@@ -112,7 +124,7 @@ mod tests {
         assert_eq!(computer.cpu.pc, 9);
 
         // Run another frame (should be a no-op since we already hit END)
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
         assert_eq!(computer.memory.ram[31232], 0x005a);
         assert_eq!(computer.cpu.pc, 9);
     }
@@ -177,7 +189,7 @@ mod tests {
         assert_eq!(computer.memory.ram[31743], 0);
 
         // Run until END instruction
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         // After execution: 101 - 99 = 2, 2 - 3 = -1 (65535), which is negative
         // So we should store 255
@@ -257,7 +269,7 @@ mod tests {
         }
 
         // Run until END instruction
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         // Verify input data is still there
         assert_eq!(computer.memory.ram[input_offset], 101);
@@ -337,7 +349,7 @@ mod tests {
 
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         assert_eq!(computer.cpu.registers[0], 0xface);
         assert_eq!(computer.cpu.registers[0xa], 0x8001);
@@ -370,7 +382,7 @@ mod tests {
 
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         assert_eq!(computer.cpu.registers[1], 0x826a);
         assert_eq!(computer.cpu.registers[2], 0x083c);
@@ -400,7 +412,7 @@ mod tests {
         ];
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         // $FBFE maps to ram[0xFBFE - 0x8000] = ram[0x7BFE] = ram[31742]
         // $FBFF maps to ram[0xFBFF - 0x8000] = ram[0x7BFF] = ram[31743]
@@ -428,7 +440,7 @@ mod tests {
         ];
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         // $FA00 maps to ram[0xFA00 - 0x8000] = ram[0x7A00] = ram[31232]
         assert_eq!(computer.memory.ram[31232], 0x7fff);
@@ -462,7 +474,7 @@ mod tests {
         ];
         let memory = create_memory_with_program(&program, &[]);
         let mut computer = Computer::new(memory);
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
 
         // $8000 maps to ram[0x8000 - 0x8000] = ram[0] = ram[0]
         // $F7FF maps to ram[0xF7FF - 0x8000] = ram[0x77FF] = ram[30719]
@@ -483,7 +495,7 @@ mod tests {
         let mut computer = Computer::new(memory);
 
         // This should fail with a MemoryError::ReadOnly
-        let result = computer.execute_frame();
+        let result = computer.run_cpu_during_render();
         assert!(result.is_err());
         if let Err(e) = result {
             match e {
@@ -511,7 +523,7 @@ mod tests {
         // has special bounds checking that Rust doesn't have yet.
         // For now, this test will pass because $FC00 is a valid address
         // We might want to add bounds checking later to match TypeScript behavior
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
         assert_eq!(computer.cpu.pc, 3);
     }
 
@@ -528,7 +540,7 @@ mod tests {
 
         // Similar to read test, $FC00 is valid in Rust
         // So this will succeed. We might want to add bounds checking later
-        computer.execute_frame().unwrap();
+        computer.run_cpu_during_render().unwrap();
         assert_eq!(computer.cpu.pc, 5);
     }
 }
