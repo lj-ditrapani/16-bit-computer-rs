@@ -20,6 +20,20 @@ See [architecture.md](architecture.md) for detailed architecture documentation o
 cargo build --release
 ```
 
+## Testing
+
+Run all tests:
+
+```bash
+cargo test
+```
+
+Run a specific test:
+
+```bash
+cargo test test_name
+```
+
 ## Formatting
 
 ```bash
@@ -29,7 +43,29 @@ cargo fmt
 ## Running
 
 ```bash
-cargo run --release -- --cartridge <path-to-cartridge-file>
+cargo run -- --cartridge <path-to-cartridge-file>
+```
+
+## Release
+
+Create a release build:
+
+```bash
+cargo build --release
+```
+
+The release binary will be located at `target/release/ljd-16-bit-computer-rs`.
+
+For cross-platform releases, use [cargo-cross](https://github.com/cross-rs/cross):
+
+```bash
+# Install cross
+cargo install cross --git https://github.com/cross-rs/cross
+
+# Build for a specific target
+cross build --release --target x86_64-unknown-linux-gnu
+cross build --release --target x86_64-pc-windows-gnu
+cross build --release --target x86_64-apple-darwin
 ```
 
 ## Status
